@@ -1,0 +1,50 @@
+so first:
+	get started with processing!
+	make the cube, play round with it,
+	have some fun :)
+
+	notes:
+	the points are vectors
+	the vectors are in whatever space you want (3d here)
+
+	then things are moved around in 3d space with matrix
+	transforms. This works for rotations because the cube 
+	because it's centered around the origin.
+
+	the vectors are then multed by a 2x3 matrix to get them
+	into 2d space
+
+	you can then take these points and draw lines between
+	them. You could do this in 3d space, but that's just 
+	more work in this case.
+
+Then:
+	So rendering for the console seems to be doable with 
+	this weird command:
+		echo -e "\x1B[5;10H<something>"
+	where <something> is what you want to print
+	to the console
+
+	it seems like the console letters are 2 tall and 1
+	wide, so our 2d projection matrix needs to scale width
+	by half
+
+	because our image is centered on zero when processing
+	we need to move it up and right when putting it onto
+	the console
+
+
+	with this what we need to do is:
+		make a grid that is our picture
+		render our picture
+		subtract the two
+		print what is different between them
+		profit?
+	
+	so lets start out with baby steps:
+		a 500 x 500 grid of nothing
+		just blank out the console
+
+
+then:
+	put the cube into the console.
