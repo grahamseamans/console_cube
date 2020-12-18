@@ -49,6 +49,15 @@ Then:
 then:
 	put the cube into the console.
 
+then:
+	put the square into a square class
+
+	make a tetrahedron class
+
+	make surfaces
+
+	add shadows
+
 
 ----------------------------------------------
 
