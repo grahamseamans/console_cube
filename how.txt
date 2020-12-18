@@ -53,8 +53,26 @@ then:
 	put the square into a square class
 
 	make a tetrahedron class
+		done
 
 	make surfaces
+		make shape classes
+			transfer everything over to being triangles?
+			you then need to have points->triangels/squares->shapes
+
+		get the surface normals for shapes
+			see if they're dot product with z+ is positive
+			if it it display it
+
+		as for displaying:
+			make a render function to rasterize a triangle or a 
+			square (fill between points with a character)
+
+		to make shading:
+			make a lighting direction vector
+			dot product that with the surface normal to get shade
+			use that number as how you select the shade of a surface.
+
 
 	add shadows
 
