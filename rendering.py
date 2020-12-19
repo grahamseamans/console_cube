@@ -59,15 +59,7 @@ class render:
         return (y * self.screen_width) + x
 
     def vect_to_screen(self, vect):
-        """
-        distance = 4
-        z = rotated[2]
-        z = 1/(distance - z)
-        z = 1 + z
-        """
-        z = 1
-
-        projection = np.array([[1 / z, 0, 0], [0, 1 / z, 0]])
+        projection = np.array([[1, 0, 0], [0, 1, 0]])
 
         point = projection @ vect
 
@@ -101,44 +93,89 @@ class render:
             if abs(i) < self.pixels:
                 self.post_screen[i] = new_pixel
 
-    def to_buff(self, tetrahedron):
-        for triangle in tetrahedron.tris_to_render:
+    def to_buff(self, shape):
+        for triangle in shape.tris_to_render:
             tri = triangle[:-1].astype("int32")
             shade = triangle[-1]
             projected_tri = []
-            for vect in tetrahedron.rotated[tri]:
+            for vect in shape.rotated[tri]:
                 x, y = self.vect_to_screen(vect)
                 projected_tri.append((x, y))
             self.triangle_raster(projected_tri, shade)
 
+    def safe_div(self, a, b):
+        if b == 0:
+            return 0
+        else:
+            return a / b
+
     def triangle_raster(self, vects, shade):
-        # https://www.scratchapixel.com/lessons/3d-basic-rendering/
-        #       rasterization-practical-implementation/rasterization-stage
-        # thankfully verticies are already clockwise :)
-        dims = list(zip(*vects))
-        left = min(dims[0])
-        right = max(dims[0])
-        top = max(dims[1])
-        bottom = min(dims[1])
+        # http://www.sunshine2k.de/coding/java/TriangleRasterization/
+        #       TriangleRasterization.html
 
-        for x in range(left, right):
-            for y in range(bottom, top):
-                p = np.array([x, y])
-                yeet = False
-                for i in range(3):
-                    yeet = yeet or (
-                        self.edge_check(vects[i], vects[(i + 1) % 3], x, y) < 0
-                    )
-                if not yeet:
-                    self.change(x, y, self.get_shade(shade))
+        # all of the triangle is the same shade, might as well do it here
+        shade = self.get_shade(shade)
 
-    def edge_check(self, vectA, vectB, x, y):
-        # tried to replace this with np.cross, and it was much slower
-        # https://www.scratchapixel.com/lessons/3d-basic-rendering/
-        #       rasterization-practical-implementation/rasterization-stage
-        return (x - vectA[0]) * (vectB[1] - vectA[1]) - (y - vectA[1]) * (
-            vectB[0] - vectA[0]
-        )
+        # sorting by y value
+        vects.sort(key=lambda x: x[1])
+
+        # no top half
+        if vects[0][1] == vects[1][1]:
+            self.flat_top_triangle(vects[0], vects[1], vects[2], shade)
+        # no bottom half
+        elif vects[1][1] == vects[2][1]:
+            self.flat_bottom_triangle(vects[0], vects[1], vects[2], shade)
+        # no flat side
+        else:
+            # getting middle vertex for the triangle split
+            long_inv_slope = self.safe_div(
+                (vects[0][0] - vects[2][0]), (vects[0][1] - vects[2][1])
+            )
+            dy = vects[1][1] - vects[0][1]
+            v4x = int(dy * long_inv_slope) + vects[0][0]
+            v4 = (v4x, vects[1][1])
+
+            self.flat_bottom_triangle(vects[0], vects[1], v4, shade)
+            self.flat_top_triangle(vects[1], v4, vects[2], shade)
+
+    def flat_bottom_triangle(self, vect1, vect2, vect3, shade):
+        # vect1 is pointing away from flat line
+
+        if vect2[0] > vect3[0]:
+            swap = vect2
+            vect2 = vect3
+            vect3 = swap
+
+        slope2 = self.safe_div((vect1[0] - vect2[0]), (vect1[1] - vect2[1]))
+        slope3 = self.safe_div((vect1[0] - vect3[0]), (vect1[1] - vect3[1]))
+        x2 = vect1[0]
+        x3 = vect1[0]
+        for y in range(vect1[1], vect2[1], 1):
+            self.horiz_line(int(x2), int(x3), y, shade)
+            x2 += slope2
+            x3 += slope3
+
+    def flat_top_triangle(self, vect1, vect2, vect3, shade):
+        # vect3 is always pointing away from flat line
+
+        if vect1[0] > vect2[0]:
+            swap = vect1
+            vect1 = vect2
+            vect2 = swap
+
+        slope1 = self.safe_div((vect3[0] - vect1[0]), (vect3[1] - vect1[1]))
+        slope2 = self.safe_div((vect3[0] - vect2[0]), (vect3[1] - vect2[1]))
+        x1 = vect3[0]
+        x2 = vect3[0]
+        # -1 after upper bound removes a gap between the triangle halves
+        for y in range(vect3[1], vect2[1] - 1, -1):
+            self.horiz_line(int(x1), int(x2), y, shade)
+            x1 -= slope1
+            x2 -= slope2
+
+    def horiz_line(self, x1, x2, y, shade):
+        for x in range(x1, x2):
+            self.change(x, y, shade)
 
     def get_shade(self, shade):
         shades = ",-+=*^c#%@"
@@ -218,6 +255,9 @@ class shape:
         return norms
 
     def normalize_v3(self, arr):
+        # taken from: https://sites.google.com/site/dlampetest/python/
+        #       calculating-normals-of-a-triangle-mesh-using-numpy
+        # so cool, got to get better at slicing
         """ Normalize a numpy array of 3 component vectors shape=(n,3) """
         lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
         arr[:, 0] /= lens
@@ -255,7 +295,7 @@ class cube(shape):
                 [7, 6, 5],
                 [7, 5, 4],
                 [2, 3, 0],
-                [3, 0, 2]
+                [3, 0, 2],
             ]
         )
         self.render = None
@@ -282,7 +322,7 @@ profiler.enable()
 r = render()
 cube = cube()
 tetrahedron = tetrahedron()
-for i in range(10000):
+for i in range(1000):
     cube.spin()
     tetrahedron.spin()
     r.to_buff(cube)

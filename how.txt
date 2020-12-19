@@ -84,6 +84,10 @@ thought it would. so what do next?
 - store the screen non-flattened
 	so you're not always translating back and forth
 
+- make the environment a class?
+	holds the objects and spins them and asks for all triangles
+	to be rendered
+
 - add shadows?
 	lord know's how, but you could probably just project the rotated 
 	shape down and get a shadow, but then you would need a surface
