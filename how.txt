@@ -73,62 +73,24 @@ then:
 			dot product that with the surface normal to get shade
 			use that number as how you select the shade of a surface.
 
+---------------------------------------------
+
+so we're where we wanted to get to. it took much less time than we 
+thought it would. so what do next?
+
+- make it run faster
+	research triange rastering. cprofile says it's way slow.
+	
+- store the screen non-flattened
+	so you're not always translating back and forth
+
+- add shadows?
+	lord know's how, but you could probably just project the rotated 
+	shape down and get a shadow, but then you would need a surface
+	and depth perception
 
 	add shadows
 
-
-----------------------------------------------
-
-figuring out how to turn the java into python
-
-points[0] = new PVector(-0.5, -0.5, -0.5);
-points[1] = new PVector(0.5, -0.5, -0.5);
-points[2] = new PVector(0.5, 0.5, -0.5);
-points[3] = new PVector(-0.5, 0.5, -0.5);
-points[4] = new PVector(-0.5, -0.5, 0.5);
-points[5] = new PVector(0.5, -0.5, 0.5);
-points[6] = new PVector(0.5, 0.5, 0.5);
-points[7] = new PVector(-0.5, 0.5, 0.5);
-
-so we have a vector of points, we want to be 
-able to turn them into 
-I guess lets just start with a dot?
-
-
-float[][] rotationX = 
-{
-{ 1, 0, 0},
-{ 0, cos(angle), -sin(angle)},
-{ 0, sin(angle), cos(angle)}
-};
-
-float[][] rotationY = 
-{
-{ cos(angle), 0, -sin(angle)},
-{ 0, 1, 0},
-{ sin(angle), 0, cos(angle)}
-};
-
-float[][] rotationZ = 
-{
-{ cos(angle), -sin(angle), 0},
-{ sin(angle), cos(angle), 0},
-{ 0, 0, 1}
-};
-
-PVector rotated = matrixToVect(matmul(rotationY, v));
-// rotated = matrixToVect(matmul(rotationY, rotated));
-// rotated = matrixToVect(matmul(rotationZ, rotated));
-
-float distance = 4;
-float z = 1/(distance - rotated.z);
-float[][] projection = 
-{
-  { 1/z ,0, 0},
-  { 0 ,1/z, 0}
-};
-
-PVector projected2d = matrixToVect(matmul(projection, rotated));
 
 
 

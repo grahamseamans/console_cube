@@ -8,6 +8,7 @@ import time
 import sys
 import cProfile
 import pstats
+import collections
 
 
 class render:
@@ -26,7 +27,7 @@ class render:
         os.system("tput civis")
 
     def __del__(self):
-        os.system(f' echo "\x1B[{self.screen_height};{0}Hall done"')
+        os.system(f' echo "\x1B[{self.screen_height - 1};{0}Hall done"')
         os.system("tput cnorm")
 
     def set_buffers(self):
@@ -100,66 +101,51 @@ class render:
             if abs(i) < self.pixels:
                 self.post_screen[i] = new_pixel
 
-    def plotLine(self, x0, y0, x1, y1):
-        # Bresenham
-        d_x = abs(x1 - x0)
-        d_y = -abs(y1 - y0)
+    def to_buff(self, tetrahedron):
+        for triangle in tetrahedron.tris_to_render:
+            tri = triangle[:-1].astype("int32")
+            shade = triangle[-1]
+            projected_tri = []
+            for vect in tetrahedron.rotated[tri]:
+                x, y = self.vect_to_screen(vect)
+                projected_tri.append((x, y))
+            self.triangle_raster(projected_tri, shade)
 
-        if x0 < x1:
-            sx = 1
-        else:
-            sx = -1
+    def triangle_raster(self, vects, shade):
+        # https://www.scratchapixel.com/lessons/3d-basic-rendering/
+        #       rasterization-practical-implementation/rasterization-stage
+        # thankfully verticies are already clockwise :)
+        dims = list(zip(*vects))
+        left = min(dims[0])
+        right = max(dims[0])
+        top = max(dims[1])
+        bottom = min(dims[1])
 
-        if y0 < y1:
-            sy = 1
-        else:
-            sy = -1
+        for x in range(left, right):
+            for y in range(bottom, top):
+                p = np.array([x, y])
+                yeet = False
+                for i in range(3):
+                    yeet = yeet or (
+                        self.edge_check(vects[i], vects[(i + 1) % 3], x, y) < 0
+                    )
+                if not yeet:
+                    self.change(x, y, self.get_shade(shade))
 
-        err = d_x + d_y
+    def edge_check(self, vectA, vectB, x, y):
+        # tried to replace this with np.cross, and it was much slower
+        # https://www.scratchapixel.com/lessons/3d-basic-rendering/
+        #       rasterization-practical-implementation/rasterization-stage
+        return (x - vectA[0]) * (vectB[1] - vectA[1]) - (y - vectA[1]) * (
+            vectB[0] - vectA[0]
+        )
 
-        self.change(x0, y0, ".")
-        while x0 != x1 and y0 != y1:
-            self.change(x0, y0, ".")
-            e2 = 2 * err
-            if e2 >= d_y:
-                err += d_y
-                x0 += sx
-            if e2 <= d_x:
-                err += d_x
-                y0 += sy
-
-    def wireframe_from_points_tetrahedron(self, tetrahedron):
-        projected_points = []
-
-        for vect in tetrahedron.rotated:
-            x, y = self.vect_to_screen(vect)
-            projected_points.append((x, y))
-
-        for i in range(4):
-            for j in range(i, 4):
-                self.plotLine(*projected_points[i], *projected_points[j])
-
-        for x, y in projected_points:
-            self.change(x, y, "#")
-
-    def wireframe_from_points_cube(self, cube):
-        projected_points = []
-
-        for vect in cube.rotated:
-            x, y = self.vect_to_screen(vect)
-            projected_points.append((x, y))
-
-        for i in range(4):
-            self.plotLine(*projected_points[i], *projected_points[(i + 1) % 4])
-            self.plotLine(*projected_points[i], *projected_points[i + 4])
-
-        self.plotLine(*projected_points[4], *projected_points[5])
-        self.plotLine(*projected_points[5], *projected_points[6])
-        self.plotLine(*projected_points[6], *projected_points[7])
-        self.plotLine(*projected_points[7], *projected_points[4])
-
-        for x, y in projected_points:
-            self.change(x, y, "#")
+    def get_shade(self, shade):
+        shades = ",-+=*^c#%@"
+        if shade < 0:
+            return "."
+        shade = int(shade * 10)
+        return shades[shade]
 
 
 class shape:
@@ -167,6 +153,8 @@ class shape:
         self.angle = 0
         self.points = None
         self.rotated = None
+        self.tris = None
+        self.tris_to_render = None
 
     def spin(self, change=0.01, X=True, Y=True, Z=True):
         self.angle += change
@@ -208,6 +196,35 @@ class shape:
             rotated.append(rotationX @ rotationY @ rotationZ @ point)
         self.rotated = np.asarray(rotated)
 
+        norms = self.surface_norms()
+        norms = self.normalize_v3(norms)
+
+        light = np.array([0, 1, 0])
+        shading = np.dot(norms, light)
+        self.tris_to_render = np.append(self.tris, np.transpose([shading]), axis=1)
+
+        view = np.array([0, 0, -1])
+        seen_mask = np.dot(norms, view)
+        self.tris_to_render = self.tris_to_render[seen_mask > 0]
+
+    def surface_norms(self):
+        # taken from: https://sites.google.com/site/dlampetest/python/
+        #       calculating-normals-of-a-triangle-mesh-using-numpy
+        # so cool, got to get better at slicing
+        tris_verts = self.rotated[self.tris]
+        norms = np.cross(
+            tris_verts[::, 1] - tris_verts[::, 0], tris_verts[::, 2] - tris_verts[::, 0]
+        )
+        return norms
+
+    def normalize_v3(self, arr):
+        """ Normalize a numpy array of 3 component vectors shape=(n,3) """
+        lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
+        arr[:, 0] /= lens
+        arr[:, 1] /= lens
+        arr[:, 2] /= lens
+        return arr
+
 
 class cube(shape):
     def __init__(self):
@@ -225,7 +242,23 @@ class cube(shape):
                 [-len, len, len],
             ]
         )
-        self.rotated = None
+        self.tris = np.array(
+            [
+                [2, 5, 6],
+                [2, 1, 5],
+                [1, 0, 4],
+                [1, 4, 5],
+                [3, 2, 6],
+                [3, 6, 7],
+                [0, 3, 7],
+                [0, 7, 4],
+                [7, 6, 5],
+                [7, 5, 4],
+                [2, 3, 0],
+                [3, 0, 2]
+            ]
+        )
+        self.render = None
 
 
 class tetrahedron(shape):
@@ -239,7 +272,8 @@ class tetrahedron(shape):
                 [0, 0, 1],
             ]
         )
-        self.rotated = None
+        self.tris = np.array([[0, 2, 3], [0, 3, 1], [0, 1, 2], [1, 3, 2]])
+        self.render = None
 
 
 profiler = cProfile.Profile()
@@ -249,10 +283,10 @@ r = render()
 cube = cube()
 tetrahedron = tetrahedron()
 for i in range(10000):
-    cube.spin(-0.01, X=True, Y=True, Z=True)
-    tetrahedron.spin(0.01, X=True, Y=True, Z=True)
-    r.wireframe_from_points_cube(cube)
-    r.wireframe_from_points_tetrahedron(tetrahedron)
+    cube.spin()
+    tetrahedron.spin()
+    r.to_buff(cube)
+    r.to_buff(tetrahedron)
     r.render()
     time.sleep(0.005)
 
