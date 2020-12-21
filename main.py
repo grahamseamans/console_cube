@@ -17,6 +17,8 @@ class render:
 
         self.screen_height = 100
         self.screen_width = 200
+        self.old_height = 0
+        self.old_width = 0
         self.pixels = self.screen_width * self.screen_height
 
         self.terminal_check()
@@ -30,7 +32,6 @@ class render:
         os.system("tput cnorm")
 
     def set_buffers(self):
-        print("creating or changing buffers")
         for i in range(self.screen_width):
             self.pre_screen.append([])
             self.post_screen.append([])
@@ -40,14 +41,16 @@ class render:
 
     def terminal_check(self):
         term = os.get_terminal_size()
-        changed = False
-        if term.columns != self.screen_width:
-            changed = True
-            self.screen_width = term.columns
-        if term.lines != self.screen_height:
-            changed = True
-            self.screen_height = term.lines
-        if changed:
+        resized_window = False
+        if term.columns != self.old_width:
+            resized_window = True
+            self.old_width = term.columns
+        if term.lines != self.old_height:
+            resized_window = True
+            self.old_height = term.lines
+        if resized_window:
+            size = min(term.columns//2, term.lines)
+            self.screen_height, self.screen_width = size, size*2
             self.pixels = self.screen_width * self.screen_height
             self.set_buffers()
 
