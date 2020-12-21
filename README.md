@@ -1,4 +1,4 @@
-*Spinning Cube
+# Spinning Cube
 
 It's also got a tetrahedron but more the merrier.
 It should run in a average python setup, the strangest
