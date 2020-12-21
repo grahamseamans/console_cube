@@ -1,14 +1,13 @@
+# main.py Graham Seamans 2020
+
 import os
 import numpy as np
 from math import cos
 from math import sin
 from math import sqrt
-import math
 import time
-import sys
 import cProfile
 import pstats
-import collections
 
 
 class render:
@@ -31,70 +30,58 @@ class render:
         os.system("tput cnorm")
 
     def set_buffers(self):
-        if self.pixels != len(self.pre_screen):
-            self.pre_screen = []
-            for _ in range(self.pixels):
-                self.pre_screen.append(" ")
-
-        if self.pixels != len(self.post_screen):
-            self.post_screen = []
-            for _ in range(self.pixels):
-                self.post_screen.append(" ")
+        print("creating or changing buffers")
+        for i in range(self.screen_width):
+            self.pre_screen.append([])
+            self.post_screen.append([])
+            for _ in range(self.screen_height):
+                self.pre_screen[i].append(" ")
+                self.post_screen[i].append(" ")
 
     def terminal_check(self):
         term = os.get_terminal_size()
+        changed = False
         if term.columns != self.screen_width:
+            changed = True
             self.screen_width = term.columns
         if term.lines != self.screen_height:
+            changed = True
             self.screen_height = term.lines
-        self.pixels = self.screen_width * self.screen_height
-        self.set_buffers()
-
-    def cordinates_from_index(self, i):
-        y = i // self.screen_width
-        x = i % self.screen_width
-        return (x, y)
-
-    def index_from_cordinates(self, x, y):
-        return (y * self.screen_width) + x
+        if changed:
+            self.pixels = self.screen_width * self.screen_height
+            self.set_buffers()
 
     def vect_to_screen(self, vect):
         projection = np.array([[1, 0, 0], [0, 1, 0]])
 
         point = projection @ vect
 
-        half_width = self.screen_width // 2
-        half_height = self.screen_height // 2
+        half_width = (self.screen_width // 2) - 1
+        half_height = (self.screen_height // 2) - 1
         x = point[0] * half_width
         y = point[1] * half_height
         x = int(x + half_width)
         y = int(y + half_height)
-        if x == self.screen_width:
-            x -= 1
-        if y == self.screen_height:
-            y -= 1
         return x, y
 
     def render(self):
         self.terminal_check()
+
+        # not very pythonic but it's ~60% faster than using a nested
+        # enumerate zip looping structure and this is the slowest part 
+        # of the program
         buffer_ = ""
-        for i, (post, pre) in enumerate(zip(self.post_screen, self.pre_screen)):
-            if pre != post:
-                x, y = self.cordinates_from_index(i)
-                buffer_ += f"\x1B[{y};{x}H{post}"
-                self.pre_screen[i] = self.post_screen[i]
-            self.post_screen[i] = " "
-
+        for x in range(self.screen_width):
+            for y in range(self.screen_height):
+                if self.pre_screen[x][y] != self.post_screen[x][y]:
+                    buffer_ += f"\x1B[{y};{x}H{self.post_screen[x][y]}"
+                    self.pre_screen[x][y] = self.post_screen[x][y]
+                self.post_screen[x][y] = " "
         os.system(f' echo "{buffer_}"')
-
-    def change(self, x, y, new_pixel):
-        if 0 <= x < self.screen_width and 0 <= y < self.screen_height:
-            i = self.index_from_cordinates(x, y)
-            if abs(i) < self.pixels:
-                self.post_screen[i] = new_pixel
 
     def to_buff(self, shape):
         for triangle in shape.tris_to_render:
+            # pull off the shade value
             tri = triangle[:-1].astype("int32")
             shade = triangle[-1]
             projected_tri = []
@@ -140,7 +127,7 @@ class render:
 
     def flat_bottom_triangle(self, vect1, vect2, vect3, shade):
         # vect1 is pointing away from flat line
-
+        # 0 is x, 1 is y
         if vect2[0] > vect3[0]:
             swap = vect2
             vect2 = vect3
@@ -157,7 +144,7 @@ class render:
 
     def flat_top_triangle(self, vect1, vect2, vect3, shade):
         # vect3 is always pointing away from flat line
-
+        # 0 is x, 1 is y
         if vect1[0] > vect2[0]:
             swap = vect1
             vect1 = vect2
@@ -175,7 +162,7 @@ class render:
 
     def horiz_line(self, x1, x2, y, shade):
         for x in range(x1, x2):
-            self.change(x, y, shade)
+            self.post_screen[x][y] = shade
 
     def get_shade(self, shade):
         shades = ",-+=*^c#%@"
@@ -193,40 +180,29 @@ class shape:
         self.tris = None
         self.tris_to_render = None
 
-    def spin(self, change=0.01, X=True, Y=True, Z=True):
+    def spin(self, change=0.01):
         self.angle += change
-        if X:
-            rotationX = np.array(
-                [
-                    [1, 0, 0],
-                    [0, cos(self.angle), -sin(self.angle)],
-                    [0, sin(self.angle), cos(self.angle)],
-                ]
-            )
-        else:
-            rotationX = np.eye(3)
-
-        if Y:
-            rotationY = np.array(
-                [
-                    [cos(self.angle), 0, -sin(self.angle)],
-                    [0, 1, 0],
-                    [sin(self.angle), 0, cos(self.angle)],
-                ]
-            )
-        else:
-            rotationY = np.eye(3)
-
-        if Z:
-            rotationZ = np.array(
-                [
-                    [cos(self.angle), -sin(self.angle), 0],
-                    [sin(self.angle), cos(self.angle), 0],
-                    [0, 0, 1],
-                ]
-            )
-        else:
-            rotationZ = np.eye(3)
+        rotationX = np.array(
+            [
+                [1, 0, 0],
+                [0, cos(self.angle), -sin(self.angle)],
+                [0, sin(self.angle), cos(self.angle)],
+            ]
+        )
+        rotationY = np.array(
+            [
+                [cos(self.angle), 0, -sin(self.angle)],
+                [0, 1, 0],
+                [sin(self.angle), 0, cos(self.angle)],
+            ]
+        )
+        rotationZ = np.array(
+            [
+                [cos(self.angle), -sin(self.angle), 0],
+                [sin(self.angle), cos(self.angle), 0],
+                [0, 0, 1],
+            ]
+        )
 
         rotated = []
         for point in self.points:
@@ -320,15 +296,15 @@ profiler = cProfile.Profile()
 profiler.enable()
 
 r = render()
-cube = cube()
-tetrahedron = tetrahedron()
-for i in range(1000):
-    cube.spin()
-    tetrahedron.spin()
-    r.to_buff(cube)
-    r.to_buff(tetrahedron)
+square = cube()
+triangle = tetrahedron()
+for i in range(10000):
+    square.spin()
+    triangle.spin(change=-0.01)
+    r.to_buff(square)
+    r.to_buff(triangle)
     r.render()
-    time.sleep(0.005)
+    time.sleep(0.01)
 
 profiler.disable()
 stats = pstats.Stats(profiler)
