@@ -209,41 +209,18 @@ class environment:
 
     def calculate_seen_and_shading(self):
         for shape in self.shapes:
-            triangle_surface_normals = self.normalize_v3(self.surface_normals(shape))
-            self.shading(shape, triangle_surface_normals)
-            self.who_is_seen(shape, triangle_surface_normals)
+            shape.calcualte_surface_normals()
+            self.shading(shape)
+            self.who_is_seen(shape)
 
-    def shading(self, shape, triangle_surface_normals):
-        shading = np.dot(triangle_surface_normals, self.light_source)
+    def shading(self, shape):
+        shading = np.dot(shape.surface_normals, self.light_source)
         shape.tris_to_render = np.append(shape.tris, np.transpose([shading]), axis=1)
 
-    def who_is_seen(self, shape, triangle_surface_normals):
-        seen_mask = np.dot(triangle_surface_normals, self.camera)
+    def who_is_seen(self, shape):
+        seen_mask = np.dot(shape.surface_normals, self.camera)
+        # breaks encapsulation
         shape.tris_to_render = shape.tris_to_render[seen_mask > 0]
-
-    def surface_normals(self, shape):
-        """
-        taken from: https://sites.google.com/site/dlampetest/python/
-               calculating-normals-of-a-triangle-mesh-using-numpy
-        so cool, got to get better at slicing
-        """
-        tris_verts = shape.rotated[shape.tris]  # epic that this works
-        norms = np.cross(
-            tris_verts[::, 1] - tris_verts[::, 0], tris_verts[::, 2] - tris_verts[::, 0]
-        )
-        return norms
-
-    def normalize_v3(self, arr):
-        """
-        taken from: https://sites.google.com/site/dlampetest/python/
-               calculating-normals-of-a-triangle-mesh-using-numpy
-        so cool, got to get better at slicing
-        """
-        lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
-        arr[:, 0] /= lens
-        arr[:, 1] /= lens
-        arr[:, 2] /= lens
-        return arr
 
 
 class shape:
@@ -255,6 +232,7 @@ class shape:
         self.tris = None
         self.tris_to_render = None
         self.rotation_matrix = None
+        self.surface_normals = None
 
     def calculate_rotation_matrix(self):
         self.rotation_matrix = self.x_rotation() @ self.y_rotation() @ self.z_rotation()
@@ -296,6 +274,28 @@ class shape:
         self.angle += self.spin_change
         self.calculate_rotation_matrix()
         self.update_rotated_points()
+
+    def calcualte_surface_normals(self):
+        """
+        https://sites.google.com/site/dlampetest/python/
+               calculating-normals-of-a-triangle-mesh-using-numpy
+        """
+        tris_verts = self.rotated[self.tris]  # epic that this works
+        self.surface_normals = np.cross(
+            tris_verts[::, 1] - tris_verts[::, 0], tris_verts[::, 2] - tris_verts[::, 0]
+        )
+        self.surface_normals = self.normalize_v3(self.surface_normals)
+
+    def normalize_v3(self, arr):
+        """
+        https://sites.google.com/site/dlampetest/python/
+               calculating-normals-of-a-triangle-mesh-using-numpy
+        """
+        lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
+        arr[:, 0] /= lens
+        arr[:, 1] /= lens
+        arr[:, 2] /= lens
+        return arr
 
 
 class cube(shape):
