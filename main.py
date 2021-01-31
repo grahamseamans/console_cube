@@ -1,13 +1,14 @@
 # main.py Graham Seamans 2020
 
-import os
-import numpy as np
+import cProfile
 from math import cos
 from math import sin
 from math import sqrt
-import time
-import cProfile
+import os
 import pstats
+import time
+
+import numpy as np
 
 
 class render:
@@ -15,20 +16,20 @@ class render:
         self.pre_screen = []
         self.post_screen = []
 
-        self.screen_height = 100
-        self.screen_width = 200
+        self.screen_height = 0
+        self.screen_width = 0
         self.old_height = 0
         self.old_width = 0
-        self.pixels = self.screen_width * self.screen_height
 
         self.terminal_check()
         self.set_buffers()
+
+        self.pixels = self.screen_width * self.screen_height
 
         os.system("clear")
         os.system("tput civis")
 
     def __del__(self):
-        os.system(f' echo "\x1B[{self.screen_height - 1};{0}Hall done"')
         os.system("tput cnorm")
 
     def set_buffers(self):
@@ -49,8 +50,8 @@ class render:
             resized_window = True
             self.old_height = term.lines
         if resized_window:
-            size = min(int(term.columns/2.2), term.lines)
-            self.screen_height, self.screen_width = size, int(size*2.2)
+            size = min(int(term.columns / 2.2), term.lines)
+            self.screen_height, self.screen_width = size, int(size * 2.2)
             self.pixels = self.screen_width * self.screen_height
             self.set_buffers()
 
@@ -71,7 +72,7 @@ class render:
         self.terminal_check()
 
         # not very pythonic but it's ~60% faster than using a nested
-        # enumerate zip looping structure and this is the slowest part 
+        # enumerate zip looping structure and this is the slowest part
         # of the program
         buffer_ = ""
         for x in range(self.screen_width):
@@ -82,15 +83,22 @@ class render:
                 self.post_screen[x][y] = " "
         os.system(f' echo "{buffer_}"')
 
+    def parse_tri(self, triangle):
+        tri = triangle[:-1].astype("int32")
+        shade = triangle[-1]
+        return (tri, shade)
+
+    def project_tri(self, tri, shape):
+        projected_tri = []
+        for vect in shape.rotated[tri]:
+            x, y = self.vect_to_screen(vect)
+            projected_tri.append((x, y))
+        return projected_tri
+
     def to_buff(self, shape):
         for triangle in shape.tris_to_render:
-            # pull off the shade value
-            tri = triangle[:-1].astype("int32")
-            shade = triangle[-1]
-            projected_tri = []
-            for vect in shape.rotated[tri]:
-                x, y = self.vect_to_screen(vect)
-                projected_tri.append((x, y))
+            (tri, shade) = self.parse_tri(triangle)
+            projected_tri = self.project_tri(tri, shape)
             self.triangle_raster(projected_tri, shade)
 
     def safe_div(self, a, b):
@@ -168,76 +176,69 @@ class render:
             self.post_screen[x][y] = shade
 
     def get_shade(self, shade):
-        shades = ",-+=*^c#%@"
+        shades = ",-_+*^c#%@"
         if shade < 0:
             return "."
-        shade = int(shade * 10)
-        return shades[shade]
+        else:
+            return shades[int(shade * 10)]
 
 
-class shape:
-    def __init__(self):
-        self.angle = 0
-        self.points = None
-        self.rotated = None
-        self.tris = None
-        self.tris_to_render = None
+class environment:
+    def __init__(self) -> None:
+        self.light_source = np.array([0, 1, 0])
+        self.camera = np.array([0, 0, -1])
+        self.shapes = []
+        self.renderer = render()
 
-    def spin(self, change=0.01):
-        self.angle += change
-        rotationX = np.array(
-            [
-                [1, 0, 0],
-                [0, cos(self.angle), -sin(self.angle)],
-                [0, sin(self.angle), cos(self.angle)],
-            ]
-        )
-        rotationY = np.array(
-            [
-                [cos(self.angle), 0, -sin(self.angle)],
-                [0, 1, 0],
-                [sin(self.angle), 0, cos(self.angle)],
-            ]
-        )
-        rotationZ = np.array(
-            [
-                [cos(self.angle), -sin(self.angle), 0],
-                [sin(self.angle), cos(self.angle), 0],
-                [0, 0, 1],
-            ]
-        )
+    def add_shape(self, shape):
+        self.shapes.append(shape)
 
-        rotated = []
-        for point in self.points:
-            rotated.append(rotationX @ rotationY @ rotationZ @ point)
-        self.rotated = np.asarray(rotated)
+    def spin_shapes(self):
+        for shape in self.shapes:
+            shape.spin()
 
-        norms = self.surface_norms()
-        norms = self.normalize_v3(norms)
+    def time_step(self):
+        self.spin_shapes()
+        self.calculate_seen_and_shading()
+        self.render_shapes()
 
-        light = np.array([0, 1, 0])
-        shading = np.dot(norms, light)
-        self.tris_to_render = np.append(self.tris, np.transpose([shading]), axis=1)
+    def render_shapes(self):
+        for shape in self.shapes:
+            self.renderer.to_buff(shape)
+        self.renderer.render()
 
-        view = np.array([0, 0, -1])
-        seen_mask = np.dot(norms, view)
-        self.tris_to_render = self.tris_to_render[seen_mask > 0]
+    def calculate_seen_and_shading(self):
+        for shape in self.shapes:
+            triangle_surface_normals = self.normalize_v3(self.surface_normals(shape))
+            self.shading(shape, triangle_surface_normals)
+            self.who_is_seen(shape, triangle_surface_normals)
 
-    def surface_norms(self):
-        # taken from: https://sites.google.com/site/dlampetest/python/
-        #       calculating-normals-of-a-triangle-mesh-using-numpy
-        # so cool, got to get better at slicing
-        tris_verts = self.rotated[self.tris]
+    def shading(self, shape, triangle_surface_normals):
+        shading = np.dot(triangle_surface_normals, self.light_source)
+        shape.tris_to_render = np.append(shape.tris, np.transpose([shading]), axis=1)
+
+    def who_is_seen(self, shape, triangle_surface_normals):
+        seen_mask = np.dot(triangle_surface_normals, self.camera)
+        shape.tris_to_render = shape.tris_to_render[seen_mask > 0]
+
+    def surface_normals(self, shape):
+        """
+        taken from: https://sites.google.com/site/dlampetest/python/
+               calculating-normals-of-a-triangle-mesh-using-numpy
+        so cool, got to get better at slicing
+        """
+        tris_verts = shape.rotated[shape.tris]  # epic that this works
         norms = np.cross(
             tris_verts[::, 1] - tris_verts[::, 0], tris_verts[::, 2] - tris_verts[::, 0]
         )
         return norms
 
     def normalize_v3(self, arr):
-        # taken from: https://sites.google.com/site/dlampetest/python/
-        #       calculating-normals-of-a-triangle-mesh-using-numpy
-        # so cool, got to get better at slicing
-        """ Normalize a numpy array of 3 component vectors shape=(n,3) """
+        """
+        taken from: https://sites.google.com/site/dlampetest/python/
+               calculating-normals-of-a-triangle-mesh-using-numpy
+        so cool, got to get better at slicing
+        """
         lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
         arr[:, 0] /= lens
         arr[:, 1] /= lens
@@ -245,8 +246,61 @@ class shape:
         return arr
 
 
+class shape:
+    def __init__(self):  # , spin_change=0.01):
+        self.angle = 0
+        self.spin_change = 0.01
+        self.points = None
+        self.rotated = None
+        self.tris = None
+        self.tris_to_render = None
+        self.rotation_matrix = None
+
+    def calculate_rotation_matrix(self):
+        self.rotation_matrix = self.x_rotation() @ self.y_rotation() @ self.z_rotation()
+
+    def x_rotation(self):
+        return np.array(
+            [
+                [1, 0, 0],
+                [0, cos(self.angle), -sin(self.angle)],
+                [0, sin(self.angle), cos(self.angle)],
+            ]
+        )
+
+    def y_rotation(self):
+        return np.array(
+            [
+                [cos(self.angle), 0, -sin(self.angle)],
+                [0, 1, 0],
+                [sin(self.angle), 0, cos(self.angle)],
+            ]
+        )
+
+    def z_rotation(self):
+        return np.array(
+            [
+                [cos(self.angle), -sin(self.angle), 0],
+                [sin(self.angle), cos(self.angle), 0],
+                [0, 0, 1],
+            ]
+        )
+
+    def update_rotated_points(self):
+        rotated_points = []
+        for point in self.points:
+            rotated_points.append(self.rotation_matrix @ point)
+        self.rotated = np.asarray(rotated_points)
+
+    def spin(self):
+        self.angle += self.spin_change
+        self.calculate_rotation_matrix()
+        self.update_rotated_points()
+
+
 class cube(shape):
     def __init__(self):
+        super().__init__()
         self.angle = 0
         len = 1 / sqrt(3)
         self.points = np.array(
@@ -282,6 +336,7 @@ class cube(shape):
 
 class tetrahedron(shape):
     def __init__(self):
+        super().__init__()
         self.angle = 0
         self.points = np.array(
             [
@@ -298,15 +353,12 @@ class tetrahedron(shape):
 profiler = cProfile.Profile()
 profiler.enable()
 
-r = render()
-square = cube()
-triangle = tetrahedron()
+env = environment()
+env.add_shape(cube())
+env.add_shape(tetrahedron())
+
 for i in range(10000):
-    square.spin()
-    triangle.spin(change=-0.01)
-    r.to_buff(square)
-    r.to_buff(triangle)
-    r.render()
+    env.time_step()
     time.sleep(0.01)
 
 profiler.disable()

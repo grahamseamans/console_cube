@@ -78,23 +78,50 @@ then:
 so we're where we wanted to get to. it took much less time than we 
 thought it would. so what do next?
 
-- make it run faster
+- make it run faster - done
 	research triange rastering. cprofile says it's way slow.
-	
+
+
 - store the screen non-flattened
 	so you're not always translating back and forth
+
 
 - make the environment a class?
 	holds the objects and spins them and asks for all triangles
 	to be rendered
+
 
 - add shadows?
 	lord know's how, but you could probably just project the rotated 
 	shape down and get a shadow, but then you would need a surface
 	and depth perception
 
-	add shadows
+- clean the existing code 
+	make the functions smaller
+	rename to clearer variables
 
 
+---------------------------------------------
+
+Cleaning
+
+rotation matrixes:
+	so what's really happening with these rotation matrixes
+	we have an object that's defined by it's points
+	when we multiply those points by a rotation matrix we get 
+	the current rotated object
+
+	step by step:
+	    object
+	    rotation matrix
+	    sort of a rotation matrix. 
+	    what we really have is:
+		something that hold a matrix
+		a function that makes the correct matrix
+
+	so what we really want is 
+	functions to make the rotation matricies for x y and z
+	a current_rotation matrix that these will all be multiplied to make
+	that can just be called rotation_matrix
 
 
