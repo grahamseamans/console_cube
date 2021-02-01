@@ -199,7 +199,8 @@ class environment:
 
     def time_step(self):
         self.spin_shapes()
-        self.calculate_seen_and_shading()
+        self.shading()
+        self.who_is_seen()
         self.render_shapes()
 
     def render_shapes(self):
@@ -207,20 +208,17 @@ class environment:
             self.renderer.to_buff(shape)
         self.renderer.render()
 
-    def calculate_seen_and_shading(self):
+    def shading(self):
         for shape in self.shapes:
-            shape.calcualte_surface_normals()
-            self.shading(shape)
-            self.who_is_seen(shape)
+            shading = np.dot(shape.surface_normals, self.light_source)
+            shading = np.transpose([shading])
+            # maybe the environment should have tris to render and shade lists
+            shape.tris_to_render = np.append(shape.tris, shading, axis=1)
 
-    def shading(self, shape):
-        shading = np.dot(shape.surface_normals, self.light_source)
-        shape.tris_to_render = np.append(shape.tris, np.transpose([shading]), axis=1)
-
-    def who_is_seen(self, shape):
-        seen_mask = np.dot(shape.surface_normals, self.camera)
-        # breaks encapsulation
-        shape.tris_to_render = shape.tris_to_render[seen_mask > 0]
+    def who_is_seen(self):
+        for shape in self.shapes:
+            seen_mask = np.dot(shape.surface_normals, self.camera)
+            shape.seen_tris_mask(seen_mask)
 
 
 class shape:
@@ -274,8 +272,12 @@ class shape:
         self.angle += self.spin_change
         self.calculate_rotation_matrix()
         self.update_rotated_points()
+        self.calculate_surface_normals()
 
-    def calcualte_surface_normals(self):
+    def seen_tris_mask(self, seen_mask):
+        self.tris_to_render = self.tris_to_render[seen_mask > 0]
+
+    def calculate_surface_normals(self):
         """
         https://sites.google.com/site/dlampetest/python/
                calculating-normals-of-a-triangle-mesh-using-numpy
