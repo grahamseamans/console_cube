@@ -13,6 +13,8 @@ import numpy as np
 
 class render:
     def __init__(self):
+        self.projection = np.array([[1, 0, 0], [0, 1, 0]])
+
         self.pre_screen = []
         self.post_screen = []
 
@@ -55,22 +57,21 @@ class render:
             self.pixels = self.screen_width * self.screen_height
             self.set_buffers()
 
-    def vect_to_screen(self, vect):
-        projection = np.array([[1, 0, 0], [0, 1, 0]])
-
-        point = projection @ vect
-
+    def stretch_shift_to_screen(self, vect):
         half_width = (self.screen_width // 2) - 1
         half_height = (self.screen_height // 2) - 1
-        x = point[0] * half_width
-        y = point[1] * half_height
-        x = int(x + half_width)
-        y = int(y + half_height)
+        half_screen = np.array((half_width, half_height))
+        vect *= half_screen
+        vect += half_screen
+        return round(vect[0]), round(vect[1])
+
+    def vect_to_screen(self, vect):
+        vect = self.projection @ vect
+        x, y = self.stretch_shift_to_screen(vect)
         return x, y
 
     def render(self):
         self.terminal_check()
-
         # not very pythonic but it's ~60% faster than using a nested
         # enumerate zip looping structure and this is the slowest part
         # of the program
