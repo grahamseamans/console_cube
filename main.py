@@ -57,10 +57,29 @@ class render:
             self.pixels = self.screen_width * self.screen_height
             self.set_buffers()
 
+    def render(self):
+        self.terminal_check()
+        # not very pythonic but it's ~60% faster than using a nested
+        # enumerate zip looping structure and this is the slowest part
+        # of the program
+        buffer = ""
+        for x in range(self.screen_width):
+            for y in range(self.screen_height):
+                if self.pre_screen[x][y] != self.post_screen[x][y]:
+                    buffer += f"\x1B[{y};{x}H{self.post_screen[x][y]}"
+                    self.pre_screen[x][y] = self.post_screen[x][y]
+                self.post_screen[x][y] = " "
+        os.system(f' echo "{buffer}"')
+
+    def parse_tri(self, triangle):
+        tri = triangle[:-1].astype("int32")
+        shade = triangle[-1]
+        return (tri, shade)
+
     def stretch_shift_to_screen(self, vect):
         half_width = (self.screen_width // 2) - 1
         half_height = (self.screen_height // 2) - 1
-        half_screen = np.array((half_width, half_height))
+        half_screen = [half_width, half_height]
         vect *= half_screen
         vect += half_screen
         return round(vect[0]), round(vect[1])
@@ -69,25 +88,6 @@ class render:
         vect = self.projection @ vect
         x, y = self.stretch_shift_to_screen(vect)
         return x, y
-
-    def render(self):
-        self.terminal_check()
-        # not very pythonic but it's ~60% faster than using a nested
-        # enumerate zip looping structure and this is the slowest part
-        # of the program
-        buffer_ = ""
-        for x in range(self.screen_width):
-            for y in range(self.screen_height):
-                if self.pre_screen[x][y] != self.post_screen[x][y]:
-                    buffer_ += f"\x1B[{y};{x}H{self.post_screen[x][y]}"
-                    self.pre_screen[x][y] = self.post_screen[x][y]
-                self.post_screen[x][y] = " "
-        os.system(f' echo "{buffer_}"')
-
-    def parse_tri(self, triangle):
-        tri = triangle[:-1].astype("int32")
-        shade = triangle[-1]
-        return (tri, shade)
 
     def project_tri(self, tri, shape):
         projected_tri = []
@@ -213,7 +213,6 @@ class environment:
         for shape in self.shapes:
             shading = np.dot(shape.surface_normals, self.light_source)
             shading = np.transpose([shading])
-            # maybe the environment should have tris to render and shade lists
             shape.tris_to_render = np.append(shape.tris, shading, axis=1)
 
     def who_is_seen(self):
@@ -223,9 +222,9 @@ class environment:
 
 
 class shape:
-    def __init__(self):  # , spin_change=0.01):
+    def __init__(self, spin=0.01):
         self.angle = 0
-        self.spin_change = 0.01
+        self.spin_change = spin
         self.points = None
         self.rotated = None
         self.tris = None
@@ -279,10 +278,8 @@ class shape:
         self.tris_to_render = self.tris_to_render[seen_mask > 0]
 
     def calculate_surface_normals(self):
-        """
-        https://sites.google.com/site/dlampetest/python/
-               calculating-normals-of-a-triangle-mesh-using-numpy
-        """
+        # https://sites.google.com/site/dlampetest/python/
+        #       calculating-normals-of-a-triangle-mesh-using-numpy
         tris_verts = self.rotated[self.tris]  # epic that this works
         self.surface_normals = np.cross(
             tris_verts[::, 1] - tris_verts[::, 0], tris_verts[::, 2] - tris_verts[::, 0]
@@ -290,10 +287,8 @@ class shape:
         self.surface_normals = self.normalize_v3(self.surface_normals)
 
     def normalize_v3(self, arr):
-        """
-        https://sites.google.com/site/dlampetest/python/
-               calculating-normals-of-a-triangle-mesh-using-numpy
-        """
+        # https://sites.google.com/site/dlampetest/python/
+        #        calculating-normals-of-a-triangle-mesh-using-numpy
         lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
         arr[:, 0] /= lens
         arr[:, 1] /= lens
@@ -302,8 +297,8 @@ class shape:
 
 
 class cube(shape):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, spin=0.01):
+        super().__init__(spin)
         self.angle = 0
         len = 1 / sqrt(3)
         self.points = np.array(
@@ -338,8 +333,8 @@ class cube(shape):
 
 
 class tetrahedron(shape):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, spin=0.01):
+        super().__init__(spin)
         self.angle = 0
         self.points = np.array(
             [
@@ -358,7 +353,7 @@ profiler.enable()
 
 env = environment()
 env.add_shape(cube())
-env.add_shape(tetrahedron())
+env.add_shape(tetrahedron(spin=-0.01))
 
 for i in range(10000):
     env.time_step()
