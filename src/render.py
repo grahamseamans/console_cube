@@ -1,3 +1,6 @@
+# render.py Graham Seamans
+
+import collections
 import numpy as np
 import os
 
@@ -93,75 +96,77 @@ class render:
             projected_tri = self.project_tri(tri, shape)
             self.triangle_raster(projected_tri, shade)
 
+    def triangle_raster(self, vects, shade):
+        # http://www.sunshine2k.de/coding/java/TriangleRasterization/
+        #       TriangleRasterization.html
+
+        shade = self.get_shade(shade)
+        vects.sort(key=lambda x: x[1])
+        point = collections.namedtuple("point", ["x", "y"])
+        a = point(vects[0][0], vects[0][1])
+        b = point(vects[1][0], vects[1][1])
+        c = point(vects[2][0], vects[2][1])
+
+        if a.y == b.y:
+            self.flat_triangle(c, a, b, shade)
+        elif b.y == c.y:
+            self.flat_triangle(a, b, c, shade)
+        else:
+            v4 = self.middle_vertex(a, b, c)
+            self.flat_triangle(a, b, v4, shade)
+            self.flat_triangle(c, b, v4, shade)
+
+    def middle_vertex(self, a, b, c):
+        point = collections.namedtuple("point", ["x", "y"])
+        long_inv_slope = self.inv_slope(a, c)
+        dy = b.y - a.y
+        v4x = int(dy * long_inv_slope) + a.x
+        return point(v4x, b.y)
+
+    def flat_triangle(self, pointy, flat1, flat2, shade):
+        assert flat1.y == flat2.y
+        flat1, flat2 = self.swap_for_ascending_x(flat1, flat2)
+        slope1, slope2 = self.slopes(pointy, flat1, flat2)
+        step, y_flat = self.raster_movement(pointy, flat1)
+        x1 = pointy.x
+        x2 = pointy.x
+
+        for y in range(pointy.y, y_flat, step):
+            self.horiz_line(int(x1), int(x2), y, shade)
+            x1 += slope1
+            x2 += slope2
+
+    def slopes(self, pointy, flat1, flat2):
+        slope1 = self.inv_slope(pointy, flat1)
+        slope2 = self.inv_slope(pointy, flat2)
+        if pointy.y > flat1.y:
+            slope1 *= -1
+            slope2 *= -1
+        return slope1, slope2
+
+    def raster_movement(self, pointy, flat):
+        if pointy.y > flat.y:
+            step = -1
+            y_flat = flat.y - 1
+        else:
+            step = 1
+            y_flat = flat.y
+        return step, y_flat
+
+    def inv_slope(self, a, b):
+        return self.safe_div(a.x - b.x, a.y - b.y)
+
     def safe_div(self, a, b):
         if b == 0:
             return 0
         else:
             return a / b
 
-    def triangle_raster(self, vects, shade):
-        # http://www.sunshine2k.de/coding/java/TriangleRasterization/
-        #       TriangleRasterization.html
-
-        # all of the triangle is the same shade, might as well do it here
-        shade = self.get_shade(shade)
-
-        # sorting by y value
-        vects.sort(key=lambda x: x[1])
-
-        # no top half
-        if vects[0][1] == vects[1][1]:
-            self.flat_top_triangle(vects[0], vects[1], vects[2], shade)
-        # no bottom half
-        elif vects[1][1] == vects[2][1]:
-            self.flat_bottom_triangle(vects[0], vects[1], vects[2], shade)
-        # no flat side
+    def swap_for_ascending_x(self, a, b):
+        if a.x > b.x:
+            return (b, a)
         else:
-            # getting middle vertex for the triangle split
-            long_inv_slope = self.safe_div(
-                (vects[0][0] - vects[2][0]), (vects[0][1] - vects[2][1])
-            )
-            dy = vects[1][1] - vects[0][1]
-            v4x = int(dy * long_inv_slope) + vects[0][0]
-            v4 = (v4x, vects[1][1])
-
-            self.flat_bottom_triangle(vects[0], vects[1], v4, shade)
-            self.flat_top_triangle(vects[1], v4, vects[2], shade)
-
-    def flat_bottom_triangle(self, vect1, vect2, vect3, shade):
-        # vect1 is pointing away from flat line
-        # 0 is x, 1 is y
-        if vect2[0] > vect3[0]:
-            swap = vect2
-            vect2 = vect3
-            vect3 = swap
-
-        slope2 = self.safe_div((vect1[0] - vect2[0]), (vect1[1] - vect2[1]))
-        slope3 = self.safe_div((vect1[0] - vect3[0]), (vect1[1] - vect3[1]))
-        x2 = vect1[0]
-        x3 = vect1[0]
-        for y in range(vect1[1], vect2[1], 1):
-            self.horiz_line(int(x2), int(x3), y, shade)
-            x2 += slope2
-            x3 += slope3
-
-    def flat_top_triangle(self, vect1, vect2, vect3, shade):
-        # vect3 is always pointing away from flat line
-        # 0 is x, 1 is y
-        if vect1[0] > vect2[0]:
-            swap = vect1
-            vect1 = vect2
-            vect2 = swap
-
-        slope1 = self.safe_div((vect3[0] - vect1[0]), (vect3[1] - vect1[1]))
-        slope2 = self.safe_div((vect3[0] - vect2[0]), (vect3[1] - vect2[1]))
-        x1 = vect3[0]
-        x2 = vect3[0]
-        # -1 after upper bound removes a gap between the triangle halves
-        for y in range(vect3[1], vect2[1] - 1, -1):
-            self.horiz_line(int(x1), int(x2), y, shade)
-            x1 -= slope1
-            x2 -= slope2
+            return (a, b)
 
     def horiz_line(self, x1, x2, y, shade):
         for x in range(x1, x2):

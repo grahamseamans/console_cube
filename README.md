@@ -1,13 +1,14 @@
-# Spinning Cube
+# Spinning 3d Shapes
 
-It's also got a tetrahedron but more the merrier.
-It should run in a average python setup, the strangest
-library used is numpy, and the console commands are 
-VT100 so they should work almost everywhere.
+To run: `$ python scr/main.py`
 
-I want to fix the gaps between triangles on
-faces that can be seen on the cube, but I've got to 
-sink some time into more practical issues.
+This program will run a spinning cube and tetrahedron 
+to the console window. It should run in an average Python 
+setup. The strangest library used is Numpy, and the 
+console commands are VT100 so they should work almost everywhere.
+
+It's a work in progress that I get to whenever I have a little
+time, so it is updated, but very irregularly.
 
 I hope this bring you joy like it does for me! look at
 those bad boys spin. :)

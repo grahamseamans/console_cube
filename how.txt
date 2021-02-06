@@ -124,4 +124,9 @@ rotation matrixes:
 	a current_rotation matrix that these will all be multiplied to make
 	that can just be called rotation_matrix
 
+I'm unhappy with how render.py is looking right now. 
+I think I want a triangle class, but I can't seem to figure
+out how to best have it interact with the render class.
 
+maybe call it 'renderTriangle' that returns an iterable?
+but that doesn't really help much either does it...
