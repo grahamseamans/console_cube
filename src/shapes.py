@@ -6,12 +6,18 @@ class shape:
     def __init__(self, spin=0.01):
         self.angle = 0
         self.spin_change = spin
-        self.points = None
-        self.rotated = None
-        self.tris = None
-        self.tris_to_render = None
-        self.rotation_matrix = None
-        self.surface_normals = None
+        self.points = []
+        self.rotated = []
+        self.tris = []
+        self.tris_to_render = []
+        self.rotation_matrix = []
+        self.surface_normals = []
+
+    def spin(self):
+        self.angle += self.spin_change
+        self.calculate_rotation_matrix()
+        self.update_rotated_points()
+        self.calculate_surface_normals()
 
     def calculate_rotation_matrix(self):
         self.rotation_matrix = self.x_rotation() @ self.y_rotation() @ self.z_rotation()
@@ -48,12 +54,6 @@ class shape:
         for point in self.points:
             rotated_points.append(self.rotation_matrix @ point)
         self.rotated = np.asarray(rotated_points)
-
-    def spin(self):
-        self.angle += self.spin_change
-        self.calculate_rotation_matrix()
-        self.update_rotated_points()
-        self.calculate_surface_normals()
 
     def seen_tris_mask(self, seen_mask):
         self.tris_to_render = self.tris_to_render[seen_mask > 0]

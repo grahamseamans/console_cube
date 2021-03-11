@@ -12,20 +12,15 @@ class environment:
     def add_shape(self, shape):
         self.shapes.append(shape)
 
-    def spin_shapes(self):
-        for shape in self.shapes:
-            shape.spin()
-
     def time_step(self):
         self.spin_shapes()
         self.shading()
         self.who_is_seen()
         self.render_shapes()
 
-    def render_shapes(self):
+    def spin_shapes(self):
         for shape in self.shapes:
-            self.renderer.to_buff(shape)
-        self.renderer.render()
+            shape.spin()
 
     def shading(self):
         for shape in self.shapes:
@@ -37,3 +32,8 @@ class environment:
         for shape in self.shapes:
             seen_mask = np.dot(shape.surface_normals, self.camera)
             shape.seen_tris_mask(seen_mask)
+
+    def render_shapes(self):
+        for shape in self.shapes:
+            self.renderer.to_buff(shape)
+        self.renderer.render()

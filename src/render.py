@@ -4,31 +4,37 @@ import collections
 import numpy as np
 import os
 
+PIXEL_WIDTH = 2.2
+PALETTE = ",-_+*^c#%@"
+
+point = collections.namedtuple("point", ["x", "y"])
+
 
 class render:
     def __init__(self):
         self.projection = np.array([[1, 0, 0], [0, 1, 0]])
-
         self.pre_screen = []
         self.post_screen = []
-
         self.screen_height = 0
         self.screen_width = 0
-        self.old_height = 0
-        self.old_width = 0
-
+        self.pixels = 0
         self.terminal_check()
-        self.set_buffers()
-
-        self.pixels = self.screen_width * self.screen_height
-
+        self.reset_buffers()
         os.system("clear")
         os.system("tput civis")
 
     def __del__(self):
         os.system("tput cnorm")
 
-    def set_buffers(self):
+    def terminal_check(self):
+        term = os.get_terminal_size()
+        if term.columns != self.screen_width or term.lines != self.screen_height:
+            size = min(int(term.columns / PIXEL_WIDTH), term.lines)
+            self.screen_height, self.screen_width = size, int(size * PIXEL_WIDTH)
+            self.pixels = self.screen_width * self.screen_height
+            self.reset_buffers()
+
+    def reset_buffers(self):
         for i in range(self.screen_width):
             self.pre_screen.append([])
             self.post_screen.append([])
@@ -36,77 +42,55 @@ class render:
                 self.pre_screen[i].append(" ")
                 self.post_screen[i].append(" ")
 
-    def terminal_check(self):
-        term = os.get_terminal_size()
-        resized_window = False
-        if term.columns != self.old_width:
-            resized_window = True
-            self.old_width = term.columns
-        if term.lines != self.old_height:
-            resized_window = True
-            self.old_height = term.lines
-        if resized_window:
-            size = min(int(term.columns / 2.2), term.lines)
-            self.screen_height, self.screen_width = size, int(size * 2.2)
-            self.pixels = self.screen_width * self.screen_height
-            self.set_buffers()
-
     def render(self):
         self.terminal_check()
-        # not very pythonic but it's ~60% faster than using a nested
-        # enumerate zip looping structure and this is the slowest part
-        # of the program
-        buffer = ""
+        command_buffer = ""
+        # not very pythonic but it's ~60% faster and this was slow
         for x in range(self.screen_width):
             for y in range(self.screen_height):
                 if self.pre_screen[x][y] != self.post_screen[x][y]:
-                    buffer += f"\x1B[{y};{x}H{self.post_screen[x][y]}"
+                    command_buffer += f"\x1B[{y};{x}H{self.post_screen[x][y]}"
                     self.pre_screen[x][y] = self.post_screen[x][y]
                 self.post_screen[x][y] = " "
-        os.system(f' echo "{buffer}"')
+        os.system(f' echo "{command_buffer}"')
+
+    def to_buff(self, shape):
+        for triangle in shape.tris_to_render:
+            tri, shade = self.parse_tri(triangle)
+            projected_tri = self.project_tri(tri, shape)
+            self.triangle_raster(projected_tri, shade)
 
     def parse_tri(self, triangle):
         tri = triangle[:-1].astype("int32")
         shade = triangle[-1]
-        return (tri, shade)
-
-    def stretch_shift_to_screen(self, vect):
-        half_width = (self.screen_width // 2) - 1
-        half_height = (self.screen_height // 2) - 1
-        half_screen = [half_width, half_height]
-        vect *= half_screen
-        vect += half_screen
-        return round(vect[0]), round(vect[1])
-
-    def vect_to_screen(self, vect):
-        vect = self.projection @ vect
-        x, y = self.stretch_shift_to_screen(vect)
-        return x, y
+        return tri, shade
 
     def project_tri(self, tri, shape):
         projected_tri = []
         for vect in shape.rotated[tri]:
-            x, y = self.vect_to_screen(vect)
-            projected_tri.append((x, y))
+            projected_tri.append(self.vect_to_screen(vect))
         return projected_tri
 
-    def to_buff(self, shape):
-        for triangle in shape.tris_to_render:
-            (tri, shade) = self.parse_tri(triangle)
-            projected_tri = self.project_tri(tri, shape)
-            self.triangle_raster(projected_tri, shade)
+    def vect_to_screen(self, vect):
+        vect = self.projection @ vect
+        vect = self.stretch_shift_to_screen(vect)
+        return self.vect_to_point(vect)
+
+    def stretch_shift_to_screen(self, vect):
+        half_screen = [self.screen_width // 2, self.screen_height // 2]
+        vect *= half_screen
+        vect += half_screen
+        return (int(vect[0]), int(vect[1]))
+
+    def vect_to_point(self, vect):
+        return point(vect[0], vect[1])
 
     def triangle_raster(self, vects, shade):
         # http://www.sunshine2k.de/coding/java/TriangleRasterization/
         #       TriangleRasterization.html
-
         shade = self.get_shade(shade)
-        vects.sort(key=lambda x: x[1])
-        point = collections.namedtuple("point", ["x", "y"])
-        a = point(vects[0][0], vects[0][1])
-        b = point(vects[1][0], vects[1][1])
-        c = point(vects[2][0], vects[2][1])
-
+        vects.sort(key=lambda p: p.y)
+        a, b, c = vects
         if a.y == b.y:
             self.flat_triangle(c, a, b, shade)
         elif b.y == c.y:
@@ -116,11 +100,15 @@ class render:
             self.flat_triangle(a, b, v4, shade)
             self.flat_triangle(c, b, v4, shade)
 
+    def get_shade(self, shade):
+        if shade < 0:
+            return "."
+        else:
+            return PALETTE[int(shade * 10)]
+
     def middle_vertex(self, a, b, c):
-        point = collections.namedtuple("point", ["x", "y"])
-        long_inv_slope = self.inv_slope(a, c)
         dy = b.y - a.y
-        v4x = int(dy * long_inv_slope) + a.x
+        v4x = int(dy * self.inv_slope(a, c)) + a.x
         return point(v4x, b.y)
 
     def flat_triangle(self, pointy, flat1, flat2, shade):
@@ -132,9 +120,15 @@ class render:
         x2 = pointy.x
 
         for y in range(pointy.y, y_flat, step):
-            self.horiz_line(int(x1), int(x2), y, shade)
+            self.horiz_line(round(x1), round(x2), y, shade)
             x1 += slope1
             x2 += slope2
+
+    def swap_for_ascending_x(self, a, b):
+        if a.x > b.x:
+            return (b, a)
+        else:
+            return (a, b)
 
     def slopes(self, pointy, flat1, flat2):
         slope1 = self.inv_slope(pointy, flat1)
@@ -143,15 +137,6 @@ class render:
             slope1 *= -1
             slope2 *= -1
         return slope1, slope2
-
-    def raster_movement(self, pointy, flat):
-        if pointy.y > flat.y:
-            step = -1
-            y_flat = flat.y - 1
-        else:
-            step = 1
-            y_flat = flat.y
-        return step, y_flat
 
     def inv_slope(self, a, b):
         return self.safe_div(a.x - b.x, a.y - b.y)
@@ -162,19 +147,15 @@ class render:
         else:
             return a / b
 
-    def swap_for_ascending_x(self, a, b):
-        if a.x > b.x:
-            return (b, a)
+    def raster_movement(self, pointy, flat):
+        if pointy.y > flat.y:
+            step = -1
+            y_flat = flat.y - 1
         else:
-            return (a, b)
+            step = 1
+            y_flat = flat.y
+        return step, y_flat
 
     def horiz_line(self, x1, x2, y, shade):
         for x in range(x1, x2):
             self.post_screen[x][y] = shade
-
-    def get_shade(self, shade):
-        shades = ",-_+*^c#%@"
-        if shade < 0:
-            return "."
-        else:
-            return shades[int(shade * 10)]
