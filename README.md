@@ -1,17 +1,14 @@
 # Spinning 3d Shapes
 
+![2021-06-14 15-46-39](https://user-images.githubusercontent.com/13323017/121968944-1f277e80-cd28-11eb-946d-f27e51dfd677.gif)
+
+
 To run: `$ python scr/main.py`
 
-Zoom out on your terminal 'ctrl' + '-' for me to get 
-higher resolution. It will automatically adjust.
-
 This program will run a spinning cube and tetrahedron 
-to the console window. It should run in an average Python 
-setup. The strangest library used is Numpy, and the 
-console commands are VT100 so they should work almost everywhere.
+to the console window.
 
-It's a work in progress that I get to whenever I have a little
-time, so it is updated, but very irregularly.
+It requires Numpy, and the console commands are VT100.
 
 I hope this bring you joy like it does for me! look at
-those bad boys spin. :)
+those bad boys spin! :)
