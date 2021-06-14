@@ -8,7 +8,7 @@ To run: `$ python scr/main.py`
 This program will run a spinning cube and tetrahedron 
 to the console window.
 
-It requires Numpy, and the console commands are VT100.
+It requires Numpy and the console commands are VT100.
 
 I hope this bring you joy like it does for me! look at
 those bad boys spin! :)
